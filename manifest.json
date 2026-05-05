@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "DSA AI Mentor",
+  "version": "2.0.0",
+  "description": "AI-powered DSA mentor — live screen reading, animated AI explanations, Hinglish guidance!",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "tabs",
+    "tabCapture"
+  ],
+  "host_permissions": [
+    "https://leetcode.com/*",
+    "https://www.hackerrank.com/*",
+    "https://www.geeksforgeeks.org/*",
+    "https://practice.geeksforgeeks.org/*",
+    "https://api.anthropic.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://leetcode.com/problems/*",
+        "https://www.hackerrank.com/challenges/*",
+        "https://www.geeksforgeeks.org/*",
+        "https://practice.geeksforgeeks.org/*"
+      ],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["video-player.html", "icons/*"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DSA Mentor Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 320px;
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: 'Sora', sans-serif;
+      padding: 20px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .logo { font-size: 28px; }
+
+    .header-text h1 {
+      font-size: 16px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #58a6ff, #3fb950);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .header-text p {
+      font-size: 11px;
+      color: #8b949e;
+      margin-top: 2px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 20px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: #8b949e;
+      margin-bottom: 16px;
+    }
+
+    .status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #3fb950;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      color: #8b949e;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      background: #161b22;
+      border: 1px solid #30363d;
+      color: #e6edf3;
+      padding: 9px 12px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.15s;
+      margin-bottom: 14px;
+    }
+
+    input:focus { border-color: #58a6ff; }
+
+    .toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 14px;
+    }
+
+    .toggle-label { font-size: 13px; color: #e6edf3; }
+    .toggle-sub { font-size: 11px; color: #8b949e; margin-top: 2px; }
+
+    .toggle {
+      position: relative;
+      width: 38px; height: 20px;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; inset: 0;
+      background: #30363d;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .toggle-slider:before {
+      content: '';
+      position: absolute;
+      width: 14px; height: 14px;
+      left: 3px; bottom: 3px;
+      background: white;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+    input:checked + .toggle-slider { background: #3fb950; }
+    input:checked + .toggle-slider:before { transform: translateX(18px); }
+
+    .save-btn {
+      width: 100%;
+      background: linear-gradient(135deg, #58a6ff, #3fb950);
+      color: #0d1117;
+      border: none;
+      padding: 11px;
+      border-radius: 8px;
+      font-family: 'Sora', sans-serif;
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 10px;
+    }
+
+    .save-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+    .open-btn {
+      width: 100%;
+      background: #161b22;
+      color: #58a6ff;
+      border: 1px solid #58a6ff;
+      padding: 9px;
+      border-radius: 8px;
+      font-family: 'Sora', sans-serif;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .open-btn:hover { background: rgba(88,166,255,0.1); }
+
+    .toast {
+      position: fixed;
+      bottom: 16px; left: 50%;
+      transform: translateX(-50%);
+      background: #3fb950;
+      color: #0d1117;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 700;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .hint {
+      font-size: 11px;
+      color: #8b949e;
+      margin-top: -10px;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    .hint a { color: #58a6ff; text-decoration: none; }
+
+    .divider {
+      border: none;
+      border-top: 1px solid #30363d;
+      margin: 14px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🧑‍💻</div>
+    <div class="header-text">
+      <h1>DSA AI Mentor</h1>
+      <p>LeetCode • HackerRank • GFG</p>
+    </div>
+  </div>
+
+  <div class="status-badge">
+    <div class="status-dot"></div>
+    <span id="status-text">Ready</span>
+  </div>
+
+  <label>Anthropic API Key</label>
+  <input type="password" id="api-key" placeholder="sk-ant-api03-..." />
+  <div class="hint">
+    API Key chahiye? <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com</a> se lo — free credits milte hain!
+  </div>
+
+  <div class="toggle-row">
+    <div>
+      <div class="toggle-label">Mentor Auto-Open</div>
+      <div class="toggle-sub">Problem page pe auto start karo</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="mentor-enabled" checked>
+      <span class="toggle-slider"></span>
+    </label>
+  </div>
+
+  <hr class="divider">
+
+  <button class="save-btn" id="save-btn">💾 Save Settings</button>
+  <button class="open-btn" id="open-btn">🚀 Mentor Kholo (Current Tab)</button>
+
+  <div class="toast" id="toast">✓ Saved!</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
