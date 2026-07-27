@@ -21,8 +21,8 @@ chrome.runtime.onInstalled.addListener(() => {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'startCapture') {
-    const tabId = sender.tab ? sender.tab.id : request.tabId;
-    startTabCapture(tabId)
+    resolveTabId(sender, request.tabId)
+      .then(tabId => startTabCapture(tabId))
       .then(streamId => sendResponse({ success: true, streamId }))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true; // Keep async response channel open
@@ -50,8 +50,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 
   if (request.action === 'getSettings') {
-    chrome.storage.local.get(['apiKey', 'mentorEnabled', 'captureEnabled'], sendResponse);
-    return true;
+    chrome.storage.local.get(['apiKey', 'mentorEnabled', 'captureEnabled'], (settings) => {
+      sendResponse(settings);
+    });
+    return true; // Added missing return true
   }
 
   if (request.action === 'saveSettings') {
@@ -59,6 +61,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 });
+
+// Helper to reliably find active tab ID
+async function resolveTabId(sender, requestedTabId) {
+  if (sender.tab && sender.tab.id) return sender.tab.id;
+  if (requestedTabId) return requestedTabId;
+  
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (activeTab && activeTab.id) return activeTab.id;
+  throw new Error('No active tab found for screen capture');
+}
 
 // ─── Screen / Tab Capture Stream ─────────────────────────────
 async function startTabCapture(tabId) {
@@ -82,8 +94,7 @@ async function callClaudeAPI({ apiKey, messages, systemPrompt }) {
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'dangerously-allow-browser': 'true'
+      'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-20241022',
@@ -122,8 +133,7 @@ async function callClaudeVision({ apiKey, base64Image, prompt, conversationHisto
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'dangerously-allow-browser': 'true'
+      'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-20241022',
@@ -172,8 +182,7 @@ Make 5 to 7 frames explaining the concept step-by-step. Keep visualization data 
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'dangerously-allow-browser': 'true'
+      'anthropic-version': '2023-06-01'
     },
     body: JSON.stringify({
       model: 'claude-3-5-sonnet-20241022',
