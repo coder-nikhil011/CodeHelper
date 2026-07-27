@@ -1,5 +1,5 @@
 // DSA Mentor v2 — Content Script
-// Full lifecycle: Platform scraping, live vision stream, UI overlays, and interactive Canvas video player
+// Full lifecycle: Platform scraping (LeetCode, HackerRank, GFG, Codeforces, CodeChef), live vision stream, UI overlays, and Canvas player
 
 (function () {
   'use strict';
@@ -36,6 +36,8 @@
     if (h.includes('leetcode')) return 'leetcode';
     if (h.includes('hackerrank')) return 'hackerrank';
     if (h.includes('geeksforgeeks')) return 'geeksforgeeks';
+    if (h.includes('codeforces')) return 'codeforces';
+    if (h.includes('codechef')) return 'codechef';
     return 'unknown';
   }
 
@@ -53,20 +55,56 @@
     return 'python';
   }
 
+  // ─── Multi-Platform Scraping Engine ──────────────────────
   function getProblemData() {
     let title = '', description = '', code = '';
+
     try {
       if (state.platform === 'leetcode') {
         title = document.querySelector('.text-title-large, [data-cy="question-title"], h4.text-lg')?.innerText?.trim() || '';
         description = document.querySelector('.elfjS, [data-cy="question-content"]')?.innerText?.trim() || '';
         const lines = document.querySelectorAll('.view-lines .view-line');
         code = Array.from(lines).map(l => l.innerText).join('\n');
-      } else {
-        title = document.title;
-        code = document.querySelector('.CodeMirror')?.CodeMirror?.getValue() || '';
+
+      } else if (state.platform === 'codeforces') {
+        title = document.querySelector('.problem-statement .header .title')?.innerText?.trim() || document.title;
+        description = document.querySelector('.problem-statement .header + div')?.innerText?.trim() || '';
+        const cm = document.querySelector('.CodeMirror');
+        if (cm && cm.CodeMirror) {
+          code = cm.CodeMirror.getValue();
+        } else {
+          code = document.querySelector('#source, textarea[name="source"]')?.value || '';
+        }
+
+      } else if (state.platform === 'codechef') {
+        title = document.querySelector('h1._problem_title__container_, .problem-title')?.innerText?.trim() || document.title;
+        description = document.querySelector('#problem-statement, ._problem_statement_')?.innerText?.trim() || '';
+        const lines = document.querySelectorAll('.monaco-editor .view-line');
+        if (lines.length > 0) {
+          code = Array.from(lines).map(l => l.innerText).join('\n');
+        } else {
+          const cm = document.querySelector('.CodeMirror');
+          code = cm?.CodeMirror?.getValue() || '';
+        }
+
+      } else if (state.platform === 'hackerrank') {
+        title = document.querySelector('.challenge-name, h1.hr-heading')?.innerText?.trim() || '';
+        description = document.querySelector('.challenge-body-html')?.innerText?.trim() || '';
+        const cm = document.querySelector('.CodeMirror');
+        code = cm?.CodeMirror?.getValue() || '';
+
+      } else if (state.platform === 'geeksforgeeks') {
+        title = document.querySelector('h3.content-header-title, .problem-statement h3')?.innerText?.trim() || '';
+        description = document.querySelector('.problem-statement, .problems_problem_content__Xm_eO')?.innerText?.trim() || '';
+        const cm = document.querySelector('.CodeMirror');
+        code = cm?.CodeMirror?.getValue() || '';
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Scraping notice:', e);
+    }
+
     state.language = detectLanguage();
+
     return {
       title: title.slice(0, 200),
       description: description.slice(0, 1500),
@@ -310,7 +348,7 @@ Respond strictly in JSON format:
     renderFrame(0);
   }
 
-  // ─── Complete Multi-DS Visualizer Engine ────────────────────
+  // ─── Multi-DS Visualizer Engine ────────────────────
   function drawVisualization(ctx, canvas, frame) {
     const W = canvas.width;
     const H = canvas.height;
@@ -452,6 +490,6 @@ Respond strictly in JSON format:
     });
   }
 
-  // Initialize background screen capture
+  // Initialize screen capture on supported pages
   startScreenCapture();
 })();
