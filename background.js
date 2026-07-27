@@ -1,5 +1,5 @@
 // DSA Mentor v2 — Background Service Worker
-// Handles: API calls, screen capture relay, session state
+// Handles: Extension lifecycle, API routing, tab screen capture, Claude Vision
 
 let captureState = {
   streamId: null,
@@ -8,19 +8,24 @@ let captureState = {
   snapshotInterval: null
 };
 
-// ─── Install ───────────────────────────────────────────
+// ─── Lifecycle Setup ─────────────────────────────────────────
 chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.set({ apiKey: '', mentorEnabled: true, captureEnabled: true });
+  chrome.storage.local.set({ 
+    apiKey: '', 
+    mentorEnabled: true, 
+    captureEnabled: true 
+  });
 });
 
-// ─── Message Router ────────────────────────────────────
+// ─── Messaging Router ────────────────────────────────────────
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
   if (request.action === 'startCapture') {
-    startTabCapture(sender.tab?.id || request.tabId)
+    const tabId = sender.tab ? sender.tab.id : request.tabId;
+    startTabCapture(tabId)
       .then(streamId => sendResponse({ success: true, streamId }))
       .catch(err => sendResponse({ success: false, error: err.message }));
-    return true;
+    return true; // Keep async response channel open
   }
 
   if (request.action === 'callClaude') {
@@ -55,7 +60,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-// ─── Tab Capture ────────────────────────────────────────
+// ─── Screen / Tab Capture Stream ─────────────────────────────
 async function startTabCapture(tabId) {
   return new Promise((resolve, reject) => {
     chrome.tabCapture.getMediaStreamId({ targetTabId: tabId }, (streamId) => {
@@ -70,34 +75,36 @@ async function startTabCapture(tabId) {
   });
 }
 
-// ─── Claude Text API ────────────────────────────────────
+// ─── Claude Text Generation ──────────────────────────────────
 async function callClaudeAPI({ apiKey, messages, systemPrompt }) {
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+      'anthropic-version': '2023-06-01',
+      'dangerously-allow-browser': 'true'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1500,
-      system: systemPrompt,
+      system: systemPrompt || getDSASystemPrompt(),
       messages
     })
   });
+
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(err.error?.message || 'API failed');
+    throw new Error(err.error?.message || 'Claude API failed');
   }
   const data = await response.json();
   return data.content[0].text;
 }
 
-// ─── Claude Vision API (screenshot analysis) ────────────
+// ─── Claude Vision Analysis ──────────────────────────────────
 async function callClaudeVision({ apiKey, base64Image, prompt, conversationHistory }) {
   const messages = [
-    ...( conversationHistory || []),
+    ...(conversationHistory || []),
     {
       role: 'user',
       content: [
@@ -115,10 +122,11 @@ async function callClaudeVision({ apiKey, base64Image, prompt, conversationHisto
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+      'anthropic-version': '2023-06-01',
+      'dangerously-allow-browser': 'true'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1500,
       system: getDSASystemPrompt(),
       messages
@@ -133,51 +141,42 @@ async function callClaudeVision({ apiKey, base64Image, prompt, conversationHisto
   return data.content[0].text;
 }
 
-// ─── AI Video Script Generator ──────────────────────────
+// ─── AI Video Script Engine ──────────────────────────────────
 async function generateVideoScript({ apiKey, concept, language, stuckPoint, problemTitle }) {
   const prompt = `You are an expert DSA animator. Generate a JSON animation script for teaching "${concept}" to a student stuck on "${problemTitle}".
 
-The student is coding in: ${language}
-They are stuck at: ${stuckPoint}
+Student programming language: ${language}
+Student stuck issue: ${stuckPoint}
 
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON in this exact structure:
 {
-  "title": "concept name",
+  "title": "${concept}",
   "totalDuration": 30,
-  "youtubeQuery": "best youtube search query for this concept",
-  "youtubeKeywords": ["keyword1", "keyword2"],
   "language": "${language}",
   "frames": [
     {
-      "time": 0,
-      "duration": 5,
-      "type": "intro",
-      "heading": "short heading",
-      "text": "explanation in HinEnglish (mix Hindi+English)",
-      "code": "optional code snippet",
-      "highlight": "which part to highlight",
+      "heading": "Short step heading",
+      "text": "Explanation in HinEnglish (mix of Hindi + English)",
       "visualization": {
-        "type": "array|tree|graph|stack|queue|hashmap|pointer|none",
-        "data": [],
-        "step": "what happens in this step",
-        "arrows": [],
-        "colors": {}
+        "type": "array|hashmap|tree",
+        "data": [1, 2, 3]
       }
     }
   ]
 }
 
-Make 6-8 frames. Each frame explains one step clearly. Code must be in ${language}. Text must be in HinEnglish. Make visualization data realistic for the concept.`;
+Make 5 to 7 frames explaining the concept step-by-step. Keep visualization data structure format valid for hashmap, tree, or array.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+      'anthropic-version': '2023-06-01',
+      'dangerously-allow-browser': 'true'
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-3-5-sonnet-20241022',
       max_tokens: 2000,
       messages: [{ role: 'user', content: prompt }]
     })
@@ -187,16 +186,23 @@ Make 6-8 frames. Each frame explains one step clearly. Code must be in ${languag
   const data = await response.json();
   const text = data.content[0].text;
 
-  // Extract JSON
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Invalid video script');
+  if (!jsonMatch) throw new Error('Invalid JSON format returned from video script generator');
   return JSON.parse(jsonMatch[0]);
 }
 
+// ─── Complete System Prompt ──────────────────────────────────
 function getDSASystemPrompt() {
-  return `You are an expert DSA mentor. Communicate in HinEnglish (mix of Hindi + English). 
-Be encouraging, never say "wrong" — say "almost! ek twist hai".
-Never give full code unless student says "show me the code" or "give full solution".
-For stuck students: offer Option A (guiding questions), B (step-by-step), C (video).
-Keep responses concise with emojis for readability.`;
+  return `You are an expert DSA mentor specializing in helping students solve coding interview problems.
+
+Key Guidelines:
+1. Speak naturally in HinEnglish (a conversational mix of Hindi and English written in Latin script).
+2. NEVER give direct code solutions right away unless the student specifically asks "give me full code" or "show solution".
+3. Be supportive and encouraging — if the student makes a mistake, say something like "Almost! Ek chota twist hai..." or "Approach sahi lag raha hai, baseline edge case dekho."
+4. Break complex logic into smaller conceptual steps.
+5. Focus heavily on time/space complexity (Big-O) and pattern recognition (e.g., Sliding Window, Two Pointers, HashMap lookup, BFS/DFS).
+6. When a student is stuck, offer choices:
+   - Option A: Guiding question
+   - Option B: Step-by-step hint
+   - Option C: Visual explanation / AI Video`;
 }
