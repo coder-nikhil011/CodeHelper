@@ -1,6 +1,4 @@
-// DSA Mentor v2 — Content Script
-// Full lifecycle: Platform scraping (LeetCode, HackerRank, GFG, Codeforces, CodeChef), live vision stream, UI overlays, and Canvas player
-
+// DSA Mentor v2 — Content Script (Refactored)
 (function () {
   'use strict';
 
@@ -13,6 +11,7 @@
     platform: detectPlatform(),
     language: 'python',
     isCapturing: false,
+    isAnalyzing: false,
     captureStream: null,
     captureCanvas: null,
     captureCtx: null,
@@ -43,7 +42,7 @@
 
   function detectLanguage() {
     try {
-      const lcLang = document.querySelector('[data-cy="lang-select"] button, .ant-select-selection-item');
+      const lcLang = document.querySelector('[data-cy="lang-select"] button, .ant-select-selection-item, #select-language');
       if (lcLang) {
         const t = lcLang.innerText.toLowerCase();
         if (t.includes('python')) return 'python';
@@ -62,8 +61,8 @@
     try {
       if (state.platform === 'leetcode') {
         title = document.querySelector('.text-title-large, [data-cy="question-title"], h4.text-lg')?.innerText?.trim() || '';
-        description = document.querySelector('.elfjS, [data-cy="question-content"]')?.innerText?.trim() || '';
-        const lines = document.querySelectorAll('.view-lines .view-line');
+        description = document.querySelector('.elfjS, [data-cy="question-content"], div[data-track-load="description_content"]')?.innerText?.trim() || '';
+        const lines = document.querySelectorAll('.monaco-editor .view-line');
         code = Array.from(lines).map(l => l.innerText).join('\n');
 
       } else if (state.platform === 'codeforces') {
@@ -108,7 +107,7 @@
     return {
       title: title.slice(0, 200),
       description: description.slice(0, 1500),
-      code: code.slice(0, 2000),
+      code: code.slice(0, 2500),
       platform: state.platform,
       language: state.language
     };
@@ -129,9 +128,10 @@
     if (state.isCapturing) return;
     try {
       const resp = await chrome.runtime.sendMessage({ action: 'startCapture', tabId: null });
-      if (!resp.success) throw new Error(resp.error);
+      if (!resp || !resp.success) throw new Error(resp?.error || 'Capture initiation failed');
 
       const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
         video: {
           mandatory: {
             chromeMediaSource: 'tab',
@@ -176,14 +176,17 @@
   }
 
   async function takeAndAnalyzeSnapshot() {
+    if (state.isAnalyzing) return; // Prevent concurrent requests
     const settings = await getSettings();
-    if (!settings.apiKey || !state.sidebarOpen) return;
+    if (!settings.apiKey || !state.sidebarOpen || !settings.captureEnabled) return;
 
     const frame = captureFrame();
     const domData = getProblemData();
 
     if (frame) {
-      analyzeWithVision(frame, domData, settings.apiKey);
+      state.isAnalyzing = true;
+      await analyzeWithVision(frame, domData, settings.apiKey);
+      state.isAnalyzing = false;
     }
   }
 
@@ -204,7 +207,7 @@ Respond strictly in JSON format:
         payload: { apiKey, base64Image, prompt, conversationHistory: [] }
       });
 
-      if (resp.success) {
+      if (resp && resp.success) {
         const jsonMatch = resp.data.match(/\{[\s\S]*?\}/);
         if (jsonMatch) {
           const analysis = JSON.parse(jsonMatch[0]);
@@ -260,6 +263,7 @@ Respond strictly in JSON format:
       const settings = await getSettings();
       if (!settings.apiKey) {
         appendMessage('mentor', '⚠️ Please set your API key in settings.');
+        if (btn) { btn.textContent = '✨ Play AI Video'; btn.disabled = false; }
         return;
       }
 
@@ -276,10 +280,10 @@ Respond strictly in JSON format:
 
       if (btn) { btn.textContent = '✨ Play AI Video'; btn.disabled = false; }
 
-      if (resp.success) {
+      if (resp && resp.success) {
         openVideoPlayer(resp.data);
       } else {
-        appendMessage('mentor', `❌ Video Generation Error: ${resp.error}`);
+        appendMessage('mentor', `❌ Video Generation Error: ${resp?.error || 'Unknown error'}`);
       }
     });
   }
@@ -293,7 +297,7 @@ Respond strictly in JSON format:
     overlay.innerHTML = `
       <div class="dsa-vp-container">
         <div class="dsa-vp-header">
-          <div class="dsa-vp-title">🎬 ${script.title}</div>
+          <div class="dsa-vp-title">🎬 ${script.title || 'Concept Visualizer'}</div>
           <button id="dsa-vp-close-btn">✕</button>
         </div>
         <canvas id="dsa-anim-canvas" width="760" height="380"></canvas>
@@ -441,9 +445,10 @@ Respond strictly in JSON format:
     });
   }
 
-  // ─── Array / Linear DS Renderer ────────────────────────────
+  // ─── Array / Linear DS Renderer (With Pointers Support) ───
   function drawArray(ctx, W, H, viz) {
     const data = Array.isArray(viz.data) ? viz.data : [];
+    const pointers = viz.pointers || {}; // e.g., { left: 0, right: 3 }
     const boxW = Math.min(60, (W - 80) / (data.length || 1));
     const boxH = 50;
     const startX = (W - data.length * boxW) / 2;
@@ -451,16 +456,33 @@ Respond strictly in JSON format:
 
     data.forEach((val, i) => {
       const x = startX + i * boxW;
+      
+      // Draw Array Box
       ctx.fillStyle = '#21262d';
       ctx.strokeStyle = '#58a6ff';
       ctx.lineWidth = 1.5;
       ctx.fillRect(x + 2, startY, boxW - 4, boxH);
       ctx.strokeRect(x + 2, startY, boxW - 4, boxH);
 
+      // Value inside Box
       ctx.fillStyle = '#e6edf3';
       ctx.font = '16px monospace';
       ctx.textAlign = 'center';
       ctx.fillText(String(val), x + boxW / 2, startY + boxH / 2 + 5);
+
+      // Index below Box
+      ctx.fillStyle = '#8b949e';
+      ctx.font = '12px monospace';
+      ctx.fillText(`[${i}]`, x + boxW / 2, startY + boxH + 20);
+
+      // Render Pointers above Box if present
+      Object.entries(pointers).forEach(([ptrName, ptrIdx]) => {
+        if (ptrIdx === i) {
+          ctx.fillStyle = '#f78166';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.fillText(`↓ ${ptrName}`, x + boxW / 2, startY - 10);
+        }
+      });
     });
   }
 
