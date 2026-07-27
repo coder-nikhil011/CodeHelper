@@ -1,46 +1,62 @@
-// DSA Mentor Popup Script
-document.addEventListener('DOMContentLoaded', async () => {
-  // Load saved settings
-  const settings = await chrome.storage.local.get(['apiKey', 'mentorEnabled']);
-  
-  if (settings.apiKey) {
-    document.getElementById('api-key').value = settings.apiKey;
-    document.getElementById('status-text').textContent = 'API Key Saved ✓';
-  }
-  
-  if (settings.mentorEnabled !== undefined) {
-    document.getElementById('mentor-enabled').checked = settings.mentorEnabled;
-  }
+// DSA Mentor v2 — Popup Script
+// Manages API Key storage, toggle settings, and UI sync
 
-  // Save button
-  document.getElementById('save-btn').addEventListener('click', async () => {
-    const apiKey = document.getElementById('api-key').value.trim();
-    const mentorEnabled = document.getElementById('mentor-enabled').checked;
+document.addEventListener('DOMContentLoaded', () => {
+  const apiKeyInput = document.getElementById('apiKey');
+  const toggleKeyBtn = document.getElementById('toggleKey');
+  const mentorEnabledToggle = document.getElementById('mentorEnabled');
+  const captureEnabledToggle = document.getElementById('captureEnabled');
+  const saveBtn = document.getElementById('saveBtn');
+  const statusMsg = document.getElementById('statusMsg');
 
-    await chrome.storage.local.set({ apiKey, mentorEnabled });
-    
-    // Show toast
-    const toast = document.getElementById('toast');
-    toast.style.opacity = '1';
-    document.getElementById('status-text').textContent = 'API Key Saved ✓';
-    setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+  // 1. Load existing settings from Chrome Storage
+  chrome.storage.local.get(['apiKey', 'mentorEnabled', 'captureEnabled'], (items) => {
+    if (items.apiKey) {
+      apiKeyInput.value = items.apiKey;
+    }
+    mentorEnabledToggle.checked = items.mentorEnabled !== false; // Default to true
+    captureEnabledToggle.checked = items.captureEnabled !== false; // Default to true
   });
 
-  // Open mentor in current tab
-  document.getElementById('open-btn').addEventListener('click', async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: () => {
-        const existing = document.getElementById('dsa-mentor-sidebar');
-        if (existing) {
-          existing.style.display = 'flex';
-        } else {
-          const btn = document.getElementById('dsa-toggle-btn');
-          if (btn) btn.click();
+  // 2. Toggle password visibility
+  toggleKeyBtn.addEventListener('click', () => {
+    if (apiKeyInput.type === 'password') {
+      apiKeyInput.type = 'text';
+      toggleKeyBtn.textContent = '🔒';
+    } else {
+      apiKeyInput.type = 'password';
+      toggleKeyBtn.textContent = '👁️';
+    }
+  });
+
+  // 3. Save Settings to Chrome Local Storage and notify background/content scripts
+  saveBtn.addEventListener('click', () => {
+    const settings = {
+      apiKey: apiKeyInput.value.trim(),
+      mentorEnabled: mentorEnabledToggle.checked,
+      captureEnabled: captureEnabledToggle.checked
+    };
+
+    chrome.storage.local.set(settings, () => {
+      // Show feedback status message
+      statusMsg.textContent = '✅ Saved successfully!';
+      
+      // Notify active tab content script if open
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0] && tabs[0].id) {
+          chrome.tabs.sendMessage(tabs[0].id, {
+            action: 'settingsUpdated',
+            settings
+          }).catch(() => {
+            // Ignore error if tab doesn't have content script injected
+          });
         }
-      }
+      });
+
+      // Clear message after 2 seconds
+      setTimeout(() => {
+        statusMsg.textContent = '';
+      }, 2000);
     });
-    window.close();
   });
 });
