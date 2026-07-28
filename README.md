@@ -1,4 +1,4 @@
-# 🧑‍💻 DSA AI Mentor — Browser Extension
+# DSA AI Mentor — Browser Extension
 
 > **An AI-powered Hinglish mentor that helps you solve DSA problems on LeetCode, HackerRank, and GeeksforGeeks — without revealing the full solution.**
 
