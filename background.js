@@ -1,5 +1,5 @@
 // DSA Mentor v2 — Background Service Worker
-// Handles: Extension lifecycle, API routing, tab screen capture, Claude Vision
+// Handles: Extension lifecycle, API routing, tab screen capture, Gemini Vision & Text
 
 let captureState = {
   streamId: null,
@@ -28,15 +28,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Keep async response channel open
   }
 
-  if (request.action === 'callClaude') {
-    callClaudeAPI(request.payload)
+  // Supporting both callClaude and callGemini for backwards compatibility
+  if (request.action === 'callClaude' || request.action === 'callGemini') {
+    callGeminiAPI(request.payload)
       .then(response => sendResponse({ success: true, data: response }))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
 
-  if (request.action === 'callClaudeVision') {
-    callClaudeVision(request.payload)
+  // Supporting both callClaudeVision and callGeminiVision
+  if (request.action === 'callClaudeVision' || request.action === 'callGeminiVision') {
+    callGeminiVision(request.payload)
       .then(response => sendResponse({ success: true, data: response }))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
@@ -53,7 +55,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     chrome.storage.local.get(['apiKey', 'mentorEnabled', 'captureEnabled'], (settings) => {
       sendResponse(settings);
     });
-    return true; // Added missing return true
+    return true;
   }
 
   if (request.action === 'saveSettings') {
@@ -87,78 +89,103 @@ async function startTabCapture(tabId) {
   });
 }
 
-// ─── Claude Text Generation ──────────────────────────────────
-async function callClaudeAPI({ apiKey, messages, systemPrompt }) {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
+// ─── Gemini Text Generation ──────────────────────────────────
+async function callGeminiAPI({ apiKey, messages, systemPrompt }) {
+  if (!apiKey) throw new Error('Gemini API key is required');
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+  // Format messages into Gemini's contents payload structure
+  const contents = (messages || []).map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }]
+  }));
+
+  const payload = {
+    contents,
+    systemInstruction: {
+      parts: [{ text: systemPrompt || getDSASystemPrompt() }]
     },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1500,
-      system: systemPrompt || getDSASystemPrompt(),
-      messages
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error?.message || 'Claude API failed');
-  }
-  const data = await response.json();
-  return data.content[0].text;
-}
-
-// ─── Claude Vision Analysis ──────────────────────────────────
-async function callClaudeVision({ apiKey, base64Image, prompt, conversationHistory }) {
-  const messages = [
-    ...(conversationHistory || []),
-    {
-      role: 'user',
-      content: [
-        {
-          type: 'image',
-          source: { type: 'base64', media_type: 'image/jpeg', data: base64Image }
-        },
-        { type: 'text', text: prompt }
-      ]
+    generationConfig: {
+      temperature: 0.4
     }
-  ];
+  };
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 1500,
-      system: getDSASystemPrompt(),
-      messages
-    })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.error?.message || 'Vision API failed');
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Gemini API Error: ${response.status}`);
   }
+
   const data = await response.json();
-  return data.content[0].text;
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
-// ─── AI Video Script Engine ──────────────────────────────────
+// ─── Gemini Vision Analysis ──────────────────────────────────
+async function callGeminiVision({ apiKey, base64Image, prompt, conversationHistory }) {
+  if (!apiKey) throw new Error('Gemini API key is required');
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+  const parts = [];
+  if (base64Image) {
+    parts.push({
+      inline_data: {
+        mime_type: 'image/jpeg',
+        data: base64Image
+      }
+    });
+  }
+  parts.push({ text: prompt });
+
+  const payload = {
+    contents: [
+      {
+        role: 'user',
+        parts: parts
+      }
+    ],
+    systemInstruction: {
+      parts: [{ text: getDSASystemPrompt() }]
+    },
+    generationConfig: {
+      responseMimeType: 'application/json', // Enforces strict JSON output
+      temperature: 0.2
+    }
+  };
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Gemini Vision API Error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+// ─── AI Video Script Engine (Gemini JSON Mode) ────────────────
 async function generateVideoScript({ apiKey, concept, language, stuckPoint, problemTitle }) {
+  if (!apiKey) throw new Error('Gemini API key is required');
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
   const prompt = `You are an expert DSA animator. Generate a JSON animation script for teaching "${concept}" to a student stuck on "${problemTitle}".
 
 Student programming language: ${language}
 Student stuck issue: ${stuckPoint}
 
-Return ONLY valid JSON in this exact structure:
+Return JSON with this exact structure:
 {
   "title": "${concept}",
   "totalDuration": 30,
@@ -177,27 +204,31 @@ Return ONLY valid JSON in this exact structure:
 
 Make 5 to 7 frames explaining the concept step-by-step. Keep visualization data structure format valid for hashmap, tree, or array.`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const payload = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.3
+    }
+  };
+
+  const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 2000,
-      messages: [{ role: 'user', content: prompt }]
-    })
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
   });
 
-  if (!response.ok) throw new Error('Video generation failed');
-  const data = await response.json();
-  const text = data.content[0].text;
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || 'Video script generation failed');
+  }
 
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Invalid JSON format returned from video script generator');
-  return JSON.parse(jsonMatch[0]);
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+  if (!text) throw new Error('Empty response received from Gemini API');
+
+  return JSON.parse(text);
 }
 
 // ─── Complete System Prompt ──────────────────────────────────
