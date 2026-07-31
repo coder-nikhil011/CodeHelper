@@ -1,4 +1,4 @@
-// DSA Mentor v2 — Content Script (Refactored)
+// DSA Mentor v2 — Content Script (Refactored for Gemini API)
 (function () {
   'use strict';
 
@@ -208,9 +208,19 @@ Respond strictly in JSON format:
       });
 
       if (resp && resp.success) {
-        const jsonMatch = resp.data.match(/\{[\s\S]*?\}/);
-        if (jsonMatch) {
-          const analysis = JSON.parse(jsonMatch[0]);
+        let analysis = null;
+        
+        // Handle direct JSON parsing or regex fallback
+        try {
+          analysis = typeof resp.data === 'string' ? JSON.parse(resp.data) : resp.data;
+        } catch (e) {
+          const jsonMatch = resp.data.match(/\{[\s\S]*?\}/);
+          if (jsonMatch) {
+            analysis = JSON.parse(jsonMatch[0]);
+          }
+        }
+
+        if (analysis) {
           state.lastScreenAnalysis = analysis;
 
           if (analysis.intervene && analysis.stuck) {
