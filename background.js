@@ -28,16 +28,16 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true; // Keep async response channel open
   }
 
-  // Supporting both callClaude and callGemini for backwards compatibility
-  if (request.action === 'callClaude' || request.action === 'callGemini') {
+  // Supporting callGemini for backwards compatibility
+  if (request.action === 'callGemini') {
     callGeminiAPI(request.payload)
       .then(response => sendResponse({ success: true, data: response }))
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
 
-  // Supporting both callClaudeVision and callGeminiVision
-  if (request.action === 'callClaudeVision' || request.action === 'callGeminiVision') {
+  // Supporting callGeminiVision
+  if (request.action === 'callGeminiVision') {
     callGeminiVision(request.payload)
       .then(response => sendResponse({ success: true, data: response }))
       .catch(err => sendResponse({ success: false, error: err.message }));
