@@ -120,13 +120,16 @@ manifest.json
 ```
 
 ---
+Here is the updated **API Key Setup** section you can drop straight into your `README.md`:
 
-# 🔑 API Key Setup
+---
 
-1. Open the extension popup.
-2. Get an Anthropic API key.
-3. Paste the key.
-4. Click **Save**.
+### 🔑 API Key Setup
+
+1. Open the extension popup by clicking the **DSA AI Mentor** icon in your browser toolbar.
+2. Get a free Google Gemini API key from [Google AI Studio](https://aistudio.google.com/).
+3. Paste your key into the **Gemini API Key** field.
+4. Click **Save API Key**.
 
 ---
 
