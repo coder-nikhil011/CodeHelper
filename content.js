@@ -203,7 +203,7 @@ Respond strictly in JSON format:
 
     try {
       const resp = await chrome.runtime.sendMessage({
-        action: 'callClaudeVision',
+        action: 'callGeminiVision',
         payload: { apiKey, base64Image, prompt, conversationHistory: [] }
       });
 
